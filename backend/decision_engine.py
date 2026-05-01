@@ -66,6 +66,12 @@ MEDIUM_URGENCY_SYMPTOMS = {
         "reason_fragment": "dizziness suggesting potential neurological evaluation needed",
         "rule_label": "dizziness -> neurological evaluation",
     },
+    "blurred vision": {
+        "specialist": "Neurologist",
+        "secondary_specialist": "Ophthalmologist",
+        "reason_fragment": "blurred vision indicating potential neurological or ophthalmological concern",
+        "rule_label": "blurred vision -> neurological / ophthalmological evaluation",
+    },
     "joint pain": {
         "specialist": "Orthopedic",
         "reason_fragment": "joint pain warranting orthopedic assessment",
@@ -245,6 +251,10 @@ SYMPTOM_MAP = {
     "passed out": "fainting",
     "blacked out": "fainting",
     "sweating": "sweating",
+    "blurry vision": "blurred vision",
+    "vision problems": "blurred vision",
+    "can't see clearly": "blurred vision",
+    "fuzzy vision": "blurred vision",
 }
 
 
@@ -278,6 +288,8 @@ def _normalize_symptom(symptom: str) -> str:
         return "fainting"
     if "bleed" in s:
         return "severe bleeding"
+    if "vision" in s or "blurr" in s:
+        return "blurred vision"
     if "throat" in s:
         return "sore throat"
     if "ear" in s and "pain" in s:
@@ -308,6 +320,7 @@ def _classify_single_symptom(symptom: str, duration_days: int):
         return {
             "urgency": "High",
             "specialist": entry["specialist"],
+            "secondary_specialist": entry.get("secondary_specialist"),
             "reason_fragment": entry["reason_fragment"],
             "rule_label": entry["rule_label"],
         }
@@ -321,12 +334,14 @@ def _classify_single_symptom(symptom: str, duration_days: int):
             return {
                 "urgency": "Low",
                 "specialist": entry["specialist"],
+                "secondary_specialist": entry.get("secondary_specialist"),
                 "reason_fragment": f"recent {symptom} (under {threshold} days) that can be monitored",
                 "rule_label": f"{symptom} (under {threshold} days) -> monitor",
             }
         return {
             "urgency": "Medium",
             "specialist": entry["specialist"],
+            "secondary_specialist": entry.get("secondary_specialist"),
             "reason_fragment": entry["reason_fragment"],
             "rule_label": entry["rule_label"],
         }
@@ -337,6 +352,7 @@ def _classify_single_symptom(symptom: str, duration_days: int):
         return {
             "urgency": "Low",
             "specialist": entry["specialist"],
+            "secondary_specialist": entry.get("secondary_specialist"),
             "reason_fragment": entry["reason_fragment"],
             "rule_label": entry["rule_label"],
         }
@@ -373,27 +389,52 @@ def _compute_confidence(
     num_symptoms: int,
     num_matched: int,
     combo_boost: int,
+    severity: str = "normal",
+    num_rules: int = 0,
 ) -> int:
     """
-    Compute a confidence percentage (clamped to 60–99).
+    Compute a confidence percentage (clamped to 60–95).
 
-    Rules:
-      - 1 matched symptom  → base 75%
-      - 2+ matched symptoms → base 88%
-      - combo match adds a boost
-      - unmatched symptoms slightly reduce confidence
+    Scoring model:
+      - base 65%
+      - 2+ symptoms   → +10
+      - 3+ symptoms   → +10 additional
+      - combo match   → +boost
+      - high severity → +15
+      - med  severity → +8
+      - 2+ rules      → +5
+      - unmatched     → small penalty
     """
     if num_matched == 0:
         return 60
 
-    base = 75 if num_matched == 1 else 88
+    base = 65
+
+    # Multi-symptom confidence boost
+    if num_matched >= 2:
+        base += 10
+    if num_matched >= 3:
+        base += 10
+
+    # Combo rule boost
     base += combo_boost
+
+    # Severity boost
+    sev = severity.strip().lower()
+    if sev == "high":
+        base += 15
+    elif sev in ("medium", "moderate"):
+        base += 8
+
+    # Matched-rules diversity bonus
+    if num_rules >= 2:
+        base += 5
 
     # Penalize slightly for unmatched symptoms
     unmatched = num_symptoms - num_matched
-    base -= unmatched * 3
+    base -= unmatched * 2
 
-    return max(60, min(base, 99))
+    return max(60, min(base, 95))
 
 
 def _build_reason(
@@ -401,26 +442,52 @@ def _build_reason(
     combo_reason: str | None,
     severity: str,
     final_urgency: str,
+    best_specialist: str = "",
+    secondary_specialist: str | None = None,
 ) -> str:
     """
     Generate a clear, human-readable reason string that explains
-    the decision in natural language.
+    the decision in natural language, including specialist
+    prioritization logic when multiple specialists are involved.
     """
-    # If a combo rule fired, lead with its reason
+    parts = []
+
+    # Lead with combo reason or symptom summary
     if combo_reason:
-        parts = [combo_reason]
-    else:
-        parts = []
-        if matched_fragments:
-            parts.append(
-                "Patient presents with "
-                + ", and ".join(matched_fragments)
-            )
+        parts.append(combo_reason)
+    elif matched_fragments:
+        parts.append(
+            "Patient presents with "
+            + ", and ".join(matched_fragments)
+        )
+
+    # Specialist prioritization explanation
+    if secondary_specialist and best_specialist:
+        _PRIORITY_PHRASES = {
+            "Cardiologist": (
+                "Cardiac-related symptoms were prioritized due to their "
+                "potentially life-threatening nature"
+            ),
+            "Pulmonologist": (
+                "Respiratory symptoms were prioritized given the risk of "
+                "acute respiratory compromise"
+            ),
+            "Emergency Medicine": (
+                "Emergency-level symptoms were prioritized due to "
+                "immediate danger to the patient"
+            ),
+        }
+        prio = _PRIORITY_PHRASES.get(
+            best_specialist,
+            f"{best_specialist} was selected as the primary specialist "
+            f"based on clinical risk assessment",
+        )
+        parts.append(prio)
 
     # Mention severity override if applicable
     if severity.strip().lower() == "high" and final_urgency in ("Medium", "High"):
         parts.append(
-            "Patient-reported severity is high, reinforcing the urgency of this case"
+            "Reported high severity reinforces the urgency of this case"
         )
 
     # Closing recommendation keyed on urgency
@@ -456,14 +523,45 @@ def _collect_matched_rules(classifications: list, combo) -> list:
 
 
 def _find_secondary_specialist(classifications: list, primary: str):
-    """Return a secondary specialist if symptoms map to more than one."""
-    seen = []
+    """
+    Return a secondary specialist if symptoms map to more than one distinct medical domain.
+    Also checks for explicit secondary_specialist fields in symptom entries.
+    """
+    all_specialists = []
     for c in classifications:
-        spec = c["specialist"]
-        if spec not in seen:
-            seen.append(spec)
-    others = [s for s in seen if s != primary]
-    return others[0] if others else None
+        all_specialists.append(c["specialist"])
+        # Check for explicit secondary specialist from symptom tables
+        explicit_sec = c.get("secondary_specialist")
+        if explicit_sec:
+            all_specialists.append(explicit_sec)
+            
+    # Include primary to correctly assess all unique domains
+    if primary not in all_specialists:
+        all_specialists.append(primary)
+
+    # Remove duplicates while preserving order
+    unique_specialists = list(dict.fromkeys(all_specialists))
+
+    # Apply priority logic
+    PRIORITY = [
+        "Cardiologist",
+        "Neurologist",
+        "Pulmonologist",
+        "Gastroenterologist",
+        "Dermatologist",
+        "General Physician"
+    ]
+
+    unique_specialists.sort(
+        key=lambda x: PRIORITY.index(x) if x in PRIORITY else 999
+    )
+
+    # Secondary specialist is the highest priority one that is NOT the primary
+    others = [s for s in unique_specialists if s != primary]
+
+    if len(others) > 0:
+        return others[0]
+    return None
 
 
 def _build_steps(
@@ -478,47 +576,67 @@ def _build_steps(
     best_specialist: str,
     secondary_specialist,
 ) -> list:
-    """Build dynamic agent reasoning steps."""
+    """Build dynamic, professional agent reasoning steps."""
     steps = []
 
-    # Step 1 – always
+    # Step 1 – intake & normalization
     steps.append(
-        f"Step 1: Parsed {len(clean_symptoms)} symptom(s): "
-        + ", ".join(clean_symptoms)
+        f"Step 1: Parsed and normalized {len(clean_symptoms)} symptom(s) "
+        f"- {', '.join(clean_symptoms)}"
     )
 
-    # Step 2 – severity & duration
+    # Step 2 – clinical context
     steps.append(
-        f"Step 2: Analyzed severity='{severity}' and duration={duration_days} day(s)"
+        f"Step 2: Evaluated clinical context "
+        f"(severity: {severity}, duration: {duration_days} day(s))"
     )
 
     # Step 3 – rule matching
     matched_count = len(classifications)
     if combo:
         steps.append(
-            f"Step 3: Matched {matched_count} individual rule(s) + 1 combo rule"
+            f"Step 3: Cross-referenced {matched_count} symptom rule(s) "
+            f"and identified 1 multi-symptom combo pattern"
         )
     elif matched_count:
-        steps.append(f"Step 3: Matched {matched_count} medical rule(s)")
+        steps.append(
+            f"Step 3: Matched {matched_count} symptom(s) against "
+            f"medical knowledge base"
+        )
     else:
-        steps.append("Step 3: No specific medical rules matched — using fallback")
+        steps.append(
+            "Step 3: No high-confidence rule match found "
+            "- applying conservative fallback protocol"
+        )
 
-    # Step 4 – urgency
-    urgency_detail = f"Step 4: Determined urgency level -> {final_urgency}"
+    # Step 4 – urgency determination
+    urgency_detail = (
+        f"Step 4: Assessed risk factors and determined "
+        f"urgency level -> {final_urgency}"
+    )
     if severity_changed:
-        urgency_detail += " (elevated by patient-reported severity)"
+        urgency_detail += " (elevated due to patient-reported high severity)"
     if escalated:
-        urgency_detail += " (escalated due to multiple serious symptoms)"
+        urgency_detail += " (escalated: multiple concurrent serious symptoms)"
     steps.append(urgency_detail)
 
-    # Step 5 – specialist
-    spec_detail = f"Step 5: Mapped primary specialist -> {best_specialist}"
+    # Step 5 – specialist prioritization
     if secondary_specialist:
-        spec_detail += f" | secondary -> {secondary_specialist}"
-    steps.append(spec_detail)
+        steps.append(
+            f"Step 5: Prioritized {best_specialist} based on critical "
+            f"condition risk; {secondary_specialist} noted as secondary referral"
+        )
+    else:
+        steps.append(
+            f"Step 5: Mapped specialist -> {best_specialist} "
+            f"based on symptom-specialist alignment"
+        )
 
-    # Step 6 – recommendation
-    steps.append("Step 6: Generated recommendation and confidence score")
+    # Step 6 – final output
+    steps.append(
+        "Step 6: Synthesized findings into recommendation "
+        "with calibrated confidence score"
+    )
 
     return steps
 
@@ -632,28 +750,33 @@ def analyze_case(
         final_urgency = "High"
 
     # ── Step 7: Confidence calculation ───────────────────────
+    matched_rules_pre = _collect_matched_rules(classifications, combo)
     confidence = _compute_confidence(
         num_symptoms=len(clean_symptoms),
         num_matched=num_matched,
         combo_boost=combo_boost,
+        severity=severity,
+        num_rules=len(matched_rules_pre),
     )
 
-    # ── Step 8: Build human-readable reason ──────────────────
+    # ── Step 8: Determine secondary specialist (moved up) ────
+    secondary_specialist = _find_secondary_specialist(
+        classifications, best_specialist
+    )
+
+    # ── Step 9: Build human-readable reason ──────────────────
     combo_reason = combo["reason"] if combo else None
     reason = _build_reason(
         matched_fragments=matched_fragments,
         combo_reason=combo_reason,
         severity=severity,
         final_urgency=final_urgency,
+        best_specialist=best_specialist,
+        secondary_specialist=secondary_specialist,
     )
 
-    # ── Step 9: Collect matched rules ─────────────────────────
+    # ── Step 10: Collect matched rules ────────────────────────
     matched_rules = _collect_matched_rules(classifications, combo)
-
-    # ── Step 10: Determine secondary specialist ──────────────
-    secondary_specialist = _find_secondary_specialist(
-        classifications, best_specialist
-    )
 
     # ── Step 11: Track whether urgency was modified ──────────
     severity_changed = final_urgency != best_urgency
@@ -673,13 +796,16 @@ def analyze_case(
             ),
             "matched_rules": [],
             "steps": [
-                f"Step 1: Parsed {len(clean_symptoms)} symptom(s): "
-                + ", ".join(clean_symptoms),
-                f"Step 2: Analyzed severity='{severity}' and duration={duration_days} day(s)",
-                "Step 3: No specific medical rules matched — using fallback",
-                "Step 4: Determined urgency level -> Low",
-                "Step 5: Mapped primary specialist -> General Physician",
-                "Step 6: Generated recommendation and confidence score",
+                f"Step 1: Parsed and normalized {len(clean_symptoms)} symptom(s) "
+                f"- {', '.join(clean_symptoms)}",
+                f"Step 2: Evaluated clinical context "
+                f"(severity: {severity}, duration: {duration_days} day(s))",
+                "Step 3: No high-confidence rule match found "
+                "- applying conservative fallback protocol",
+                "Step 4: Assessed risk factors and determined urgency level -> Low",
+                "Step 5: Mapped specialist -> General Physician based on fallback protocol",
+                "Step 6: Synthesized findings into recommendation "
+                "with calibrated confidence score",
             ],
         }
 
