@@ -1,136 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, Zap, TrendingUp, Award, Users, Activity, Heart, Shield, Clock, ChevronRight } from "lucide-react";
+import "../styles/home.css";
 import Navbar from "../components/Navbar";
 import CTABannerUpgraded from "../components/CTABannerUpgraded"; // ← IMPORT UPGRADED CTA
-import "../styles/home.css";
-
-/* ── Particle canvas ── */
-function ParticleCanvas() {
-  const canvasRef = useRef(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
-    let animId;
-    const W = () => (canvas.width = window.innerWidth);
-    const H = () => (canvas.height = window.innerHeight);
-    W(); H();
-
-    const COLS = { teal: "0,212,180", blue: "14,165,233", pink: "244,114,182" };
-    const colorKeys = Object.values(COLS);
-
-    const dots = Array.from({ length: 70 }, () => ({
-      x: Math.random() * canvas.width,
-      y: Math.random() * canvas.height,
-      r: Math.random() * 1.8 + 0.4,
-      vx: (Math.random() - 0.5) * 0.35,
-      vy: (Math.random() - 0.5) * 0.35,
-      color: colorKeys[Math.floor(Math.random() * colorKeys.length)],
-      alpha: Math.random() * 0.5 + 0.15,
-    }));
-
-    const draw = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      dots.forEach((d) => {
-        d.x += d.vx;
-        d.y += d.vy;
-        if (d.x < 0) d.x = canvas.width;
-        if (d.x > canvas.width) d.x = 0;
-        if (d.y < 0) d.y = canvas.height;
-        if (d.y > canvas.height) d.y = 0;
-
-        ctx.beginPath();
-        ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${d.color},${d.alpha})`;
-        ctx.fill();
-      });
-
-      // draw lines between close dots
-      for (let i = 0; i < dots.length; i++) {
-        for (let j = i + 1; j < dots.length; j++) {
-          const dx = dots[i].x - dots[j].x;
-          const dy = dots[i].y - dots[j].y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < 120) {
-            ctx.beginPath();
-            ctx.moveTo(dots[i].x, dots[i].y);
-            ctx.lineTo(dots[j].x, dots[j].y);
-            ctx.strokeStyle = `rgba(0,212,180,${0.07 * (1 - dist / 120)})`;
-            ctx.lineWidth = 0.6;
-            ctx.stroke();
-          }
-        }
-      }
-      animId = requestAnimationFrame(draw);
-    };
-
-    draw();
-    const onResize = () => { W(); H(); };
-    window.addEventListener("resize", onResize);
-    return () => { cancelAnimationFrame(animId); window.removeEventListener("resize", onResize); };
-  }, []);
-
-  return <canvas ref={canvasRef} className="particle-canvas" />;
-}
-
-/* ── Typewriter ── */
-function Typewriter({ words }) {
-  const [idx, setIdx] = useState(0);
-  const [charIdx, setCharIdx] = useState(0);
-  const [deleting, setDeleting] = useState(false);
-  const [display, setDisplay] = useState("");
-
-  useEffect(() => {
-    const current = words[idx];
-    const timeout = deleting
-      ? setTimeout(() => {
-          setDisplay(current.slice(0, charIdx - 1));
-          setCharIdx((c) => c - 1);
-          if (charIdx - 1 === 0) { setDeleting(false); setIdx((i) => (i + 1) % words.length); }
-        }, 60)
-      : setTimeout(() => {
-          setDisplay(current.slice(0, charIdx + 1));
-          setCharIdx((c) => c + 1);
-          if (charIdx + 1 === current.length) setTimeout(() => setDeleting(true), 1800);
-        }, 90);
-    return () => clearTimeout(timeout);
-  }, [charIdx, deleting, idx, words]);
-
-  return (
-    <span className="typewriter-text">
-      {display}<span className="typewriter-cursor">|</span>
-    </span>
-  );
-}
-
-/* ── Stat counter ── */
-function StatCounter({ target, suffix = "" }) {
-  const [count, setCount] = useState(0);
-  const ref = useRef(null);
-  const started = useRef(false);
-
-  useEffect(() => {
-    const obs = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting && !started.current) {
-        started.current = true;
-        const duration = 1800;
-        const steps = 60;
-        const inc = target / steps;
-        let cur = 0;
-        const timer = setInterval(() => {
-          cur += inc;
-          if (cur >= target) { setCount(target); clearInterval(timer); }
-          else setCount(Math.floor(cur));
-        }, duration / steps);
-      }
-    }, { threshold: 0.5 });
-    if (ref.current) obs.observe(ref.current);
-    return () => obs.disconnect();
-  }, [target]);
-
-  return <span ref={ref}>{count.toLocaleString()}{suffix}</span>;
-}
+import ParticleCanvas from "../components/ParticleCanvas"; // ← IMPORT PARTICLE CANVAS
+import Typewriter from "../components/Typewriter"; // ← IMPORT TYPEWRITER
+import StatCounter from "../components/StatCounter"; // ← IMPORT STAT COUNTER
+import { predefinedSymptoms, doctorDB, features, howItWorks, stats } from "../components/homeData"; // ← IMPORT HOME DATA
 
 export default function Home() {
   const [selectedSymptoms, setSelectedSymptoms] = useState([]);
@@ -141,20 +18,20 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const predefinedSymptoms = [
-    { id: 1, name: "Headache", emoji: "🧠" },
-    { id: 2, name: "Chest Pain", emoji: "❤️" },
-    { id: 3, name: "Fever", emoji: "🌡️" },
-    { id: 4, name: "Cough", emoji: "💨" },
-    { id: 5, name: "Fatigue", emoji: "😴" },
-    { id: 6, name: "Dizziness", emoji: "🌀" },
-    { id: 7, name: "Shortness of Breath", emoji: "🫁" },
-    { id: 8, name: "Nausea", emoji: "🤢" },
-    { id: 9, name: "Back Pain", emoji: "📍" },
-    { id: 10, name: "Sore Throat", emoji: "😣" },
-    { id: 11, name: "Chill", emoji: "❄️" },
-    { id: 12, name: "Vomiting", emoji: "🤮" },
-  ];
+//   const predefinedSymptoms = [
+//     { id: 1, name: "Headache", emoji: "🧠" },
+//     { id: 2, name: "Chest Pain", emoji: "❤️" },
+//     { id: 3, name: "Fever", emoji: "🌡️" },
+//     { id: 4, name: "Cough", emoji: "💨" },
+//     { id: 5, name: "Fatigue", emoji: "😴" },
+//     { id: 6, name: "Dizziness", emoji: "🌀" },
+//     { id: 7, name: "Shortness of Breath", emoji: "🫁" },
+//     { id: 8, name: "Nausea", emoji: "🤢" },
+//     { id: 9, name: "Back Pain", emoji: "📍" },
+//     { id: 10, name: "Sore Throat", emoji: "😣" },
+//     { id: 11, name: "Chill", emoji: "❄️" },
+//     { id: 12, name: "Vomiting", emoji: "🤮" },
+//   ];
 
   const toggleSymptom = (name) => {
     setSelectedSymptoms((prev) =>
@@ -194,23 +71,23 @@ export default function Home() {
     setLoading(true);
 
     const result = triage(selectedSymptoms, severity);
-    const doctorDB = {
-      Cardiologist: [
-        { name: "Dr. Rajesh Sharma", specialization: "Cardiologist", rating: 4.9, exp: "14 yrs", slots: ["9:00 AM", "11:30 AM", "3:00 PM"] },
-        { name: "Dr. Priya Mehta", specialization: "Cardiologist", rating: 4.7, exp: "10 yrs", slots: ["10:00 AM", "2:00 PM"] },
-      ],
-      Neurologist: [
-        { name: "Dr. Sunita Rao", specialization: "Neurologist", rating: 4.8, exp: "12 yrs", slots: ["9:00 AM", "2:30 PM"] },
-        { name: "Dr. Arjun Mehta", specialization: "Neurologist", rating: 4.6, exp: "8 yrs", slots: ["11:00 AM", "4:00 PM"] },
-      ],
-      Orthopedist: [
-        { name: "Dr. Ajay Verma", specialization: "Orthopedist", rating: 4.7, exp: "11 yrs", slots: ["10:30 AM", "1:00 PM", "4:00 PM"] },
-      ],
-      "General Physician": [
-        { name: "Dr. Ritu Gupta", specialization: "General Physician", rating: 4.8, exp: "9 yrs", slots: ["8:30 AM", "12:00 PM", "4:00 PM"] },
-        { name: "Dr. Sameer Khan", specialization: "General Physician", rating: 4.6, exp: "7 yrs", slots: ["9:30 AM", "1:30 PM"] },
-      ],
-    };
+    // const doctorDB = {
+    //   Cardiologist: [
+    //     { name: "Dr. Rajesh Sharma", specialization: "Cardiologist", rating: 4.9, exp: "14 yrs", slots: ["9:00 AM", "11:30 AM", "3:00 PM"] },
+    //     { name: "Dr. Priya Mehta", specialization: "Cardiologist", rating: 4.7, exp: "10 yrs", slots: ["10:00 AM", "2:00 PM"] },
+    //   ],
+    //   Neurologist: [
+    //     { name: "Dr. Sunita Rao", specialization: "Neurologist", rating: 4.8, exp: "12 yrs", slots: ["9:00 AM", "2:30 PM"] },
+    //     { name: "Dr. Arjun Mehta", specialization: "Neurologist", rating: 4.6, exp: "8 yrs", slots: ["11:00 AM", "4:00 PM"] },
+    //   ],
+    //   Orthopedist: [
+    //     { name: "Dr. Ajay Verma", specialization: "Orthopedist", rating: 4.7, exp: "11 yrs", slots: ["10:30 AM", "1:00 PM", "4:00 PM"] },
+    //   ],
+    //   "General Physician": [
+    //     { name: "Dr. Ritu Gupta", specialization: "General Physician", rating: 4.8, exp: "9 yrs", slots: ["8:30 AM", "12:00 PM", "4:00 PM"] },
+    //     { name: "Dr. Sameer Khan", specialization: "General Physician", rating: 4.6, exp: "7 yrs", slots: ["9:30 AM", "1:30 PM"] },
+    //   ],
+    // };
 
     const data = {
       symptoms: selectedSymptoms,
@@ -233,21 +110,21 @@ export default function Home() {
     setTimeout(() => { setLoading(false); navigate("/result", { state: data }); }, 1600);
   };
 
-  const features = [
-    { Icon: Zap, title: "AI-Powered Triage", desc: "Rule-based decision engine classifies urgency in milliseconds — no guesswork." },
-    { Icon: TrendingUp, title: "Real-time Matching", desc: "Instantly match with available specialists based on your symptom profile." },
-    { Icon: Award, title: "Top Specialists", desc: "Access verified, highly-rated doctors across all major medical disciplines." },
-    { Icon: Shield, title: "Private & Secure", desc: "Your health data stays on-device. We never share your information." },
-    { Icon: Clock, title: "Instant Availability", desc: "See real-time open slots and book in one tap without waiting on hold." },
-    { Icon: Heart, title: "Holistic Care", desc: "From diagnosis to follow-up, we keep your entire health journey connected." },
-  ];
+//   const features = [
+//     { Icon: Zap, title: "AI-Powered Triage", desc: "Rule-based decision engine classifies urgency in milliseconds — no guesswork." },
+//     { Icon: TrendingUp, title: "Real-time Matching", desc: "Instantly match with available specialists based on your symptom profile." },
+//     { Icon: Award, title: "Top Specialists", desc: "Access verified, highly-rated doctors across all major medical disciplines." },
+//     { Icon: Shield, title: "Private & Secure", desc: "Your health data stays on-device. We never share your information." },
+//     { Icon: Clock, title: "Instant Availability", desc: "See real-time open slots and book in one tap without waiting on hold." },
+//     { Icon: Heart, title: "Holistic Care", desc: "From diagnosis to follow-up, we keep your entire health journey connected." },
+//   ];
 
-  const howItWorks = [
-    { step: "01", title: "Describe Symptoms", desc: "Select from common symptoms or type your own. Add severity and duration." },
-    { step: "02", title: "AI Analyzes", desc: "Our triage engine classifies urgency and maps to the right specialist." },
-    { step: "03", title: "See Reasoning", desc: "Watch each step of the agent's decision-making process in real time." },
-    { step: "04", title: "Book Instantly", desc: "Choose a doctor and time slot. Your appointment is confirmed immediately." },
-  ];
+//   const howItWorks = [
+//     { step: "01", title: "Describe Symptoms", desc: "Select from common symptoms or type your own. Add severity and duration." },
+//     { step: "02", title: "AI Analyzes", desc: "Our triage engine classifies urgency and maps to the right specialist." },
+//     { step: "03", title: "See Reasoning", desc: "Watch each step of the agent's decision-making process in real time." },
+//     { step: "04", title: "Book Instantly", desc: "Choose a doctor and time slot. Your appointment is confirmed immediately." },
+//   ];
 
   // Zigzag scroll observer
   useEffect(() => {
@@ -262,12 +139,12 @@ export default function Home() {
     return () => obs.disconnect();
   }, []);
 
-  const stats = [
-    { value: 50000, suffix: "+", label: "Patients Served" },
-    { value: 98, suffix: "%", label: "Accuracy Rate" },
-    { value: 200, suffix: "+", label: "Verified Doctors" },
-    { value: 30, suffix: "s", label: "Avg Triage Time" },
-  ];
+//   const stats = [
+//     { value: 50000, suffix: "+", label: "Patients Served" },
+//     { value: 98, suffix: "%", label: "Accuracy Rate" },
+//     { value: 200, suffix: "+", label: "Verified Doctors" },
+//     { value: 30, suffix: "s", label: "Avg Triage Time" },
+//   ];
 
   return (
     <div className="home-page">
