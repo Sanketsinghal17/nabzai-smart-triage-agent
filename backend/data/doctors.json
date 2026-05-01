@@ -1,0 +1,22 @@
+[
+  {"id": 1,  "name": "Dr Rajesh Sharma",  "specialist": "Cardiologist",       "hospital": "Apollo",  "location": "Delhi",   "rating": 4.7, "experience": 15, "available": true,  "slots": ["09:00", "11:00", "15:00"]},
+  {"id": 2,  "name": "Dr Priya Verma",    "specialist": "Cardiologist",       "hospital": "Fortis",  "location": "Noida",   "rating": 4.5, "experience": 10, "available": true,  "slots": ["10:00", "13:00"]},
+  {"id": 3,  "name": "Dr Suresh Iyer",    "specialist": "Cardiologist",       "hospital": "Max",     "location": "Delhi",   "rating": 4.6, "experience": 12, "available": true,  "slots": ["08:30", "12:30"]},
+  {"id": 4,  "name": "Dr Aman Gupta",     "specialist": "Dermatologist",      "hospital": "Max",     "location": "Delhi",   "rating": 4.3, "experience": 8,  "available": true,  "slots": ["11:00", "14:00"]},
+  {"id": 5,  "name": "Dr Neha Mehta",     "specialist": "Dermatologist",      "hospital": "Apollo",  "location": "Gurgaon", "rating": 4.6, "experience": 11, "available": true,  "slots": ["12:00", "16:00"]},
+  {"id": 6,  "name": "Dr Meenakshi Rao",  "specialist": "Dermatologist",      "hospital": "Fortis",  "location": "Delhi",   "rating": 4.7, "experience": 14, "available": true,  "slots": ["09:00", "13:00"]},
+  {"id": 7,  "name": "Dr Arjun Verma",    "specialist": "General Physician",  "hospital": "Max",     "location": "Noida",   "rating": 4.2, "experience": 6,  "available": true,  "slots": ["08:00", "12:00", "18:00"]},
+  {"id": 8,  "name": "Dr Sana Khan",      "specialist": "General Physician",  "hospital": "Fortis",  "location": "Delhi",   "rating": 4.4, "experience": 9,  "available": true,  "slots": ["09:30", "13:30"]},
+  {"id": 9,  "name": "Dr Alok Mishra",    "specialist": "General Physician",  "hospital": "Apollo",  "location": "Delhi",   "rating": 4.3, "experience": 7,  "available": true,  "slots": ["10:00", "17:00"]},
+  {"id": 10, "name": "Dr Rohit Jain",     "specialist": "Orthopedic",         "hospital": "Apollo",  "location": "Delhi",   "rating": 4.6, "experience": 13, "available": true,  "slots": ["10:00", "14:00"]},
+  {"id": 11, "name": "Dr Kavita Singh",   "specialist": "Orthopedic",         "hospital": "Max",     "location": "Noida",   "rating": 4.3, "experience": 9,  "available": true,  "slots": ["11:30", "15:30"]},
+  {"id": 12, "name": "Dr Tarun Khanna",   "specialist": "Orthopedic",         "hospital": "Fortis",  "location": "Noida",   "rating": 4.4, "experience": 10, "available": true,  "slots": ["11:00", "16:00"]},
+  {"id": 13, "name": "Dr Vikram Rao",     "specialist": "Neurologist",        "hospital": "Fortis",  "location": "Delhi",   "rating": 4.8, "experience": 18, "available": true,  "slots": ["09:00", "12:00"]},
+  {"id": 14, "name": "Dr Pooja Kapoor",   "specialist": "Neurologist",        "hospital": "Apollo",  "location": "Gurgaon", "rating": 4.5, "experience": 11, "available": true,  "slots": ["10:30", "14:30"]},
+  {"id": 15, "name": "Dr Anjali Desai",   "specialist": "Neurologist",        "hospital": "Max",     "location": "Delhi",   "rating": 4.6, "experience": 13, "available": true,  "slots": ["10:00", "15:00"]},
+  {"id": 16, "name": "Dr Nitin Agarwal",  "specialist": "Pediatrician",       "hospital": "Max",     "location": "Delhi",   "rating": 4.4, "experience": 9,  "available": true,  "slots": ["09:00", "11:00"]},
+  {"id": 17, "name": "Dr Sneha Joshi",    "specialist": "Pediatrician",       "hospital": "Fortis",  "location": "Noida",   "rating": 4.6, "experience": 12, "available": true,  "slots": ["12:00", "16:00"]},
+  {"id": 18, "name": "Dr Rahul Sen",      "specialist": "Pediatrician",       "hospital": "Apollo",  "location": "Gurgaon", "rating": 4.5, "experience": 10, "available": true,  "slots": ["09:30", "14:30"]},
+  {"id": 19, "name": "Dr Deepak Bansal",  "specialist": "ENT",                "hospital": "Apollo",  "location": "Delhi",   "rating": 4.2, "experience": 7,  "available": true,  "slots": ["10:00", "13:00"]},
+  {"id": 20, "name": "Dr Ritu Malhotra",  "specialist": "ENT",                "hospital": "Max",     "location": "Gurgaon", "rating": 4.5, "experience": 11, "available": true,  "slots": ["11:00", "15:00"]}
+]
