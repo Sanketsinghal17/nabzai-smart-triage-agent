@@ -15,6 +15,8 @@ export default function Home() {
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [severity, setSeverity] = useState("Moderate");
   const [duration, setDuration] = useState("1-3 days");
+  const [patientName, setPatientName] = useState("");
+  const [patientAge, setPatientAge] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
@@ -66,48 +68,55 @@ export default function Home() {
     return { urgency: high ? "Medium" : "Low", specialist: "General Physician", icon: "🏥", reason: "Symptoms suggest a general medical consultation is recommended." };
   };
 
-  const handleAnalyze = () => {
-    if (!selectedSymptoms.length) { alert("Please select at least one symptom."); return; }
+  const handleAnalyze = async () => {
+    if (!patientName || !patientAge) {
+      alert("Please enter patient name and age.");
+      return;
+    }
+    if (!selectedSymptoms.length) {
+     alert("Please select at least one symptom.");
+      return;
+    }
+
     setLoading(true);
 
-    const result = triage(selectedSymptoms, severity);
-    // const doctorDB = {
-    //   Cardiologist: [
-    //     { name: "Dr. Rajesh Sharma", specialization: "Cardiologist", rating: 4.9, exp: "14 yrs", slots: ["9:00 AM", "11:30 AM", "3:00 PM"] },
-    //     { name: "Dr. Priya Mehta", specialization: "Cardiologist", rating: 4.7, exp: "10 yrs", slots: ["10:00 AM", "2:00 PM"] },
-    //   ],
-    //   Neurologist: [
-    //     { name: "Dr. Sunita Rao", specialization: "Neurologist", rating: 4.8, exp: "12 yrs", slots: ["9:00 AM", "2:30 PM"] },
-    //     { name: "Dr. Arjun Mehta", specialization: "Neurologist", rating: 4.6, exp: "8 yrs", slots: ["11:00 AM", "4:00 PM"] },
-    //   ],
-    //   Orthopedist: [
-    //     { name: "Dr. Ajay Verma", specialization: "Orthopedist", rating: 4.7, exp: "11 yrs", slots: ["10:30 AM", "1:00 PM", "4:00 PM"] },
-    //   ],
-    //   "General Physician": [
-    //     { name: "Dr. Ritu Gupta", specialization: "General Physician", rating: 4.8, exp: "9 yrs", slots: ["8:30 AM", "12:00 PM", "4:00 PM"] },
-    //     { name: "Dr. Sameer Khan", specialization: "General Physician", rating: 4.6, exp: "7 yrs", slots: ["9:30 AM", "1:30 PM"] },
-    //   ],
-    // };
+    try {
+      const durationMap = {
+        "Less than 24h": 1,
+        "1-3 days": 3,
+        "3-7 days": 7,
+        "More than a week": 10
+      };
 
-    const data = {
-      symptoms: selectedSymptoms,
-      severity,
-      duration,
-      urgency: result.urgency,
-      specialist: result.specialist,
-      icon: result.icon,
-      reason: result.reason,
-      steps: [
-        `Parsed ${selectedSymptoms.length} symptom(s): ${selectedSymptoms.join(", ")}`,
-        `Severity classified as "${severity}" · Duration: ${duration}`,
-        `Urgency level set to "${result.urgency}" via decision engine`,
-        `Specialist mapped → ${result.specialist}`,
-        `Found ${(doctorDB[result.specialist] || []).length} available doctors with open slots`,
-      ],
-      doctors: doctorDB[result.specialist] || doctorDB["General Physician"],
-    };
+      const response = await fetch("http://127.0.0.1:8000/analyze", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          symptoms: selectedSymptoms,
+          severity: severity.toLowerCase(),
+          duration_days: durationMap[duration]
+        })
+      });
 
-    setTimeout(() => { setLoading(false); navigate("/result", { state: data }); }, 1600);
+      const data = await response.json();
+
+      console.log(data);
+
+      setLoading(false);
+
+      navigate("/result", {
+        state: { ... data,
+        patientName,
+        patientAge}
+      });
+
+    } catch (error) {
+      console.error(error);
+      setLoading(false);
+      alert("Backend connection failed.");
+    }
   };
 
 //   const features = [
@@ -263,7 +272,26 @@ export default function Home() {
 
       {/* ── MAIN FORM ── */}
       <div className="home-container" id="symptom-section">
+        {/* Patient Details */}
+        <div className="patient-details-section">
+         <h3>Patient Details</h3>
 
+          <div className="patient-inputs">
+            <input
+              type="text"
+              placeholder="Enter Patient Name"
+              value={patientName}
+              onChange={(e) => setPatientName(e.target.value)}
+            />
+
+            <input
+              type="number"
+              placeholder="Enter Age"
+              value={patientAge}
+              onChange={(e) => setPatientAge(e.target.value)}
+            />
+          </div>
+        </div>
         {/* Symptoms */}
         <div className="symptoms-section">
           <h3>Select your symptoms</h3>

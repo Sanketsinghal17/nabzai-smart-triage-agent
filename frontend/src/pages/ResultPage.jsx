@@ -68,7 +68,27 @@ function ConfRing({ pct }) {
 export default function Result() {
   const { state }  = useLocation();
   const navigate   = useNavigate();
-  const data       = state || MOCK;
+  const data = state
+  ? {
+      ...state,
+      symptoms: state.symptoms || ["Selected symptoms"],
+      severity: state.severity || "High",
+      duration: state.duration || "Not specified",
+
+      doctors: [
+        {
+          name: state.doctor,
+          specialization: state.specialist,
+          exp: "10+ yrs",
+          rating: "4.8",
+          slots: [state.slot],
+          location: state.location
+        }
+      ],
+
+      icon: state.icon || "🏥"
+    }
+  : MOCK;
 
   const [selectedDoc,  setSelectedDoc]  = useState(null);
   const [selectedSlot, setSelectedSlot] = useState(null);
@@ -88,12 +108,40 @@ export default function Result() {
   /* ── booked ── */
   if (booked) return (
     <div className="rp">
-      <div className="rp-nav-fixed"><Navbar /></div>
+      <div className="rp-nav-fixed">
+        <Navbar />
+      </div>
+
       <div className="booked-screen">
         <div className="booked-icon">✓</div>
+
         <h2>Appointment Confirmed!</h2>
-        <p>Your appointment with <strong>{selectedDoc}</strong> is booked for <strong>{selectedSlot}</strong>.<br />A confirmation will be sent to your registered number.</p>
-        <button className="btn-outline" onClick={() => navigate("/")}><ArrowLeft size={15} /> Analyze New Symptoms</button>
+
+        <div className="appointment-slip">
+          <h3>Appointment Slip</h3>
+
+          <p><strong>Patient Name:</strong> {data.patientName}</p>
+          <p><strong>Age:</strong> {data.patientAge}</p>
+          <p><strong>Doctor:</strong> {selectedDoc}</p>
+          <p><strong>Specialist:</strong> {data.specialist}</p>
+          <p><strong>Appointment Slot:</strong> {selectedSlot}</p>
+          <p><strong>Hospital Location:</strong> {data.location}</p>
+          <p><strong>Urgency Level:</strong> {data.urgency}</p>
+          <p><strong>Status:</strong> Confirmed ✅</p>
+        </div>
+        <button
+          className="btn-print"
+          onClick={() => window.print()}
+        > 
+          Print Appointment Slip
+        </button>
+        <button
+          className="btn-outline"
+          onClick={() => navigate("/")}
+          >
+          <ArrowLeft size={15} />
+          Analyze New Symptoms
+        </button>
       </div>
     </div>
   );
@@ -119,11 +167,17 @@ export default function Result() {
       <header className="rp-header">
         <p className="rp-kicker">Analysis Complete</p>
         <h1 className="rp-title">Your Health Report</h1>
+        
         <p className="rp-meta">
           {data.symptoms.length} symptom{data.symptoms.length !== 1 ? "s" : ""}&nbsp;·&nbsp;
           {data.severity}&nbsp;·&nbsp;{data.duration}
         </p>
       </header>
+      <div className="patient-info-card">
+          <h3>Patient Information</h3>
+          <p><strong>Name:</strong> {data.patientName}</p>
+          <p><strong>Age:</strong> {data.patientAge}</p>
+      </div>
 
       <div className="rp-body">
 
@@ -213,6 +267,7 @@ export default function Result() {
                     <h4>{doc.name}</h4>
                     <p className="doc-spec">{doc.specialization}</p>
                     <p className="doc-exp">{doc.exp} experience</p>
+                    <p className="doc-exp">{doc.location}</p>
                   </div>
                   <div className="doc-rating"><Star size={11} fill="#fbbf24" color="#fbbf24" />{doc.rating}</div>
                 </div>
