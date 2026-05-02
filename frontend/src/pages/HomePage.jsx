@@ -88,7 +88,7 @@ export default function Home() {
         "More than a week": 10
       };
 
-      const response = await fetch("https://nabzai-smart-triage-agent.onrender.com/analyze", {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/analyze`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
