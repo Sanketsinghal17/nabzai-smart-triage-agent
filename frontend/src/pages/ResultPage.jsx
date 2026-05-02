@@ -108,12 +108,35 @@ export default function Result() {
   /* ── booked ── */
   if (booked) return (
     <div className="rp">
-      <div className="rp-nav-fixed"><Navbar /></div>
+      <div className="rp-nav-fixed">
+        <Navbar />
+      </div>
+
       <div className="booked-screen">
         <div className="booked-icon">✓</div>
+
         <h2>Appointment Confirmed!</h2>
-        <p>Your appointment with <strong>{selectedDoc}</strong> is booked for <strong>{selectedSlot}</strong>.<br />A confirmation will be sent to your registered number.</p>
-        <button className="btn-outline" onClick={() => navigate("/")}><ArrowLeft size={15} /> Analyze New Symptoms</button>
+
+        <div className="appointment-slip">
+          <h3>Appointment Slip</h3>
+
+          <p><strong>Patient Name:</strong> {data.patientName}</p>
+          <p><strong>Age:</strong> {data.patientAge}</p>
+          <p><strong>Doctor:</strong> {selectedDoc}</p>
+          <p><strong>Specialist:</strong> {data.specialist}</p>
+          <p><strong>Appointment Slot:</strong> {selectedSlot}</p>
+          <p><strong>Hospital Location:</strong> {data.location}</p>
+          <p><strong>Urgency Level:</strong> {data.urgency}</p>
+          <p><strong>Status:</strong> Confirmed ✅</p>
+        </div>
+
+        <button
+          className="btn-outline"
+          onClick={() => navigate("/")}
+          >
+          <ArrowLeft size={15} />
+          Analyze New Symptoms
+        </button>
       </div>
     </div>
   );
