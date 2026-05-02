@@ -68,7 +68,27 @@ function ConfRing({ pct }) {
 export default function Result() {
   const { state }  = useLocation();
   const navigate   = useNavigate();
-  const data       = state || MOCK;
+  const data = state
+  ? {
+      ...state,
+      symptoms: state.symptoms || ["Selected symptoms"],
+      severity: state.severity || "High",
+      duration: state.duration || "Not specified",
+
+      doctors: [
+        {
+          name: state.doctor,
+          specialization: state.specialist,
+          exp: "10+ yrs",
+          rating: "4.8",
+          slots: [state.slot],
+          location: state.location
+        }
+      ],
+
+      icon: state.icon || "🏥"
+    }
+  : MOCK;
 
   const [selectedDoc,  setSelectedDoc]  = useState(null);
   const [selectedSlot, setSelectedSlot] = useState(null);
@@ -213,6 +233,7 @@ export default function Result() {
                     <h4>{doc.name}</h4>
                     <p className="doc-spec">{doc.specialization}</p>
                     <p className="doc-exp">{doc.exp} experience</p>
+                    <p className="doc-exp">{doc.location}</p>
                   </div>
                   <div className="doc-rating"><Star size={11} fill="#fbbf24" color="#fbbf24" />{doc.rating}</div>
                 </div>
