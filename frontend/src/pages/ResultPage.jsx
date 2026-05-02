@@ -199,15 +199,29 @@ export default function Result() {
           </div>
 
         </div>
+        {/* ══ ROW 2: REASONING ══ */}
+        {/* <div className="card reason-card">
+          <div className="card-label">Why This Recommendation?</div>
+          <p className="reason-text">{data.reason}</p>
+        </div> */}
 
         {/* ══ SPECIALIST ══ */}
         <div className="card specialist-card">
           <div className="card-label">Recommended Specialist</div>
+
           <div className="specialist-row">
-            <span className="spec-icon">{data.icon || "🏥"}</span>
-            <div>
+           <span className="spec-icon">{data.icon || "🏥"}</span>
+
+          <div>
               <div className="spec-name">{data.specialist}</div>
               <p className="spec-reason">{data.reason}</p>
+
+              {/* Secondary Specialist */}
+              {data.secondary_specialist && (
+                <div className="secondary-specialist">
+                  <strong>Backup Specialist:</strong> {data.secondary_specialist}
+                </div>
+              )}
             </div>
           </div>
         </div>
