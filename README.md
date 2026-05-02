@@ -61,6 +61,7 @@ Patient Details → Symptom Input → AI Analysis → Specialist Recommendation 
 ---
 
 # Architecture Diagram
+![NabzAI Architecture](assets/architecture.png)
 
 Frontend (React)
 
