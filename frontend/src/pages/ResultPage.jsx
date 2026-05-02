@@ -129,7 +129,12 @@ export default function Result() {
           <p><strong>Urgency Level:</strong> {data.urgency}</p>
           <p><strong>Status:</strong> Confirmed ✅</p>
         </div>
-
+        <button
+          className="btn-print"
+          onClick={() => window.print()}
+        > 
+          Print Appointment Slip
+        </button>
         <button
           className="btn-outline"
           onClick={() => navigate("/")}

@@ -579,3 +579,43 @@
   color: white;
   margin: 8px 0;
 }
+.btn-print {
+  background: linear-gradient(90deg, #00d4b4, #00c2ff);
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 20px;
+  margin-bottom: 20px;
+  width: auto;
+  min-width: 220px;
+  height: auto;
+  display: inline-block;
+  transition: 0.3s ease;
+  font-size: 14px;
+}
+
+.btn-print:hover {
+  transform: scale(1.05);
+}
+@media print {
+  .rp-nav-fixed,
+  .btn-outline,
+  .btn-print {
+    display: none;
+  }
+
+  body {
+    background: white;
+    color: black;
+  }
+
+  .appointment-slip {
+    box-shadow: none;
+    /* border: 1px solid black; */
+    /* background: white; */
+    /* color: black; */
+  }
+}
