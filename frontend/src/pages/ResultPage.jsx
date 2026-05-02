@@ -168,7 +168,7 @@ export default function Result() {
           {data.severity}&nbsp;·&nbsp;{data.duration}
         </p>
       </header>
-      <div className="card">
+      <div className="patient-info-card">
           <h3>Patient Information</h3>
           <p><strong>Name:</strong> {data.patientName}</p>
           <p><strong>Age:</strong> {data.patientAge}</p>

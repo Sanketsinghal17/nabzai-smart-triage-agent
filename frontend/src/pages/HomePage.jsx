@@ -107,9 +107,9 @@ export default function Home() {
       setLoading(false);
 
       navigate("/result", {
-        state: data,
+        state: { ... data,
         patientName,
-        patientAge
+        patientAge}
       });
 
     } catch (error) {
