@@ -15,6 +15,8 @@ export default function Home() {
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [severity, setSeverity] = useState("Moderate");
   const [duration, setDuration] = useState("1-3 days");
+  const [patientName, setPatientName] = useState("");
+  const [patientAge, setPatientAge] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
@@ -67,6 +69,10 @@ export default function Home() {
   };
 
   const handleAnalyze = async () => {
+    if (!patientName || !patientAge) {
+      alert("Please enter patient name and age.");
+      return;
+    }
     if (!selectedSymptoms.length) {
      alert("Please select at least one symptom.");
       return;
@@ -101,7 +107,9 @@ export default function Home() {
       setLoading(false);
 
       navigate("/result", {
-        state: data
+        state: data,
+        patientName,
+        patientAge
       });
 
     } catch (error) {
@@ -264,7 +272,26 @@ export default function Home() {
 
       {/* ── MAIN FORM ── */}
       <div className="home-container" id="symptom-section">
+        {/* Patient Details */}
+        <div className="patient-details-section">
+         <h3>Patient Details</h3>
 
+          <div className="patient-inputs">
+            <input
+              type="text"
+              placeholder="Enter Patient Name"
+              value={patientName}
+              onChange={(e) => setPatientName(e.target.value)}
+            />
+
+            <input
+              type="number"
+              placeholder="Enter Age"
+              value={patientAge}
+              onChange={(e) => setPatientAge(e.target.value)}
+            />
+          </div>
+        </div>
         {/* Symptoms */}
         <div className="symptoms-section">
           <h3>Select your symptoms</h3>
