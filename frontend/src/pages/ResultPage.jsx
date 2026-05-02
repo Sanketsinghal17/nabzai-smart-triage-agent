@@ -139,11 +139,17 @@ export default function Result() {
       <header className="rp-header">
         <p className="rp-kicker">Analysis Complete</p>
         <h1 className="rp-title">Your Health Report</h1>
+        
         <p className="rp-meta">
           {data.symptoms.length} symptom{data.symptoms.length !== 1 ? "s" : ""}&nbsp;·&nbsp;
           {data.severity}&nbsp;·&nbsp;{data.duration}
         </p>
       </header>
+      <div className="card">
+          <h3>Patient Information</h3>
+          <p><strong>Name:</strong> {data.patientName}</p>
+          <p><strong>Age:</strong> {data.patientAge}</p>
+      </div>
 
       <div className="rp-body">
 
