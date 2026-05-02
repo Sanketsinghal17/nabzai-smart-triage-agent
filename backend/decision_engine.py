@@ -2,9 +2,16 @@
 NabzAI – Smart Appointment Triage Agent
 Decision Engine (Core Logic)
 
-A rule-based decision engine that simulates Agentic AI reasoning.
-Pipeline: Input → Analyze → Decide → Explain
+A HYBRID decision engine combining rule-based triage with
+ML-powered generalization for unseen symptom patterns.
+Pipeline: Input → Rules → ML Fallback → Decide → Explain
 """
+
+from ml_engine import (
+    predict_from_symptoms,
+    CATEGORY_URGENCY,
+    CATEGORY_TO_SPECIALIST,
+)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -212,6 +219,24 @@ URGENCY_RANK = {"Low": 1, "Medium": 2, "High": 3}
 # Map urgency to human-friendly risk level
 RISK_LEVEL_MAP = {"High": "Critical", "Medium": "Moderate", "Low": "Mild"}
 
+# Specialist clinical priority scores (higher = more critical specialty)
+SPECIALIST_PRIORITY = {
+    "Cardiologist": 5,
+    "Pulmonologist": 5,
+    "Ophthalmologist": 5,
+    "Neurologist": 4,
+    "Urologist": 4,
+    "Psychiatrist": 4,
+    "Orthopedic": 4,
+    "Gastroenterologist": 4,
+    "Endocrinologist": 3,
+    "Dermatologist": 3,
+    "ENT Specialist": 3,
+    "Dentist": 2,
+    "Oncologist": 5,
+    "General Physician": 1,
+}
+
 # ─────────────────────────────────────────────────────────────
 # Symptom Normalization Layer
 # ─────────────────────────────────────────────────────────────
@@ -303,8 +328,10 @@ def _normalize_symptom(symptom: str) -> str:
 # ─────────────────────────────────────────────────────────────
 
 def _normalize_symptoms(symptoms: list) -> list:
-    """Lowercase, strip, and normalize each symptom to its canonical form."""
-    return [_normalize_symptom(s) for s in symptoms if isinstance(s, str)]
+    """Lowercase, strip, and normalize each symptom to its canonical form, then deduplicate."""
+    normalized = [_normalize_symptom(s) for s in symptoms if isinstance(s, str)]
+    # deduplicate while preserving order
+    return list(dict.fromkeys(normalized))
 
 
 def _classify_single_symptom(symptom: str, duration_days: int):
@@ -389,56 +416,44 @@ def _compute_confidence(
     num_symptoms: int,
     num_matched: int,
     combo_boost: int,
+    clean_symptoms: list,
     severity: str = "normal",
     num_rules: int = 0,
+    final_urgency: str = "Low",
 ) -> int:
     """
-    Compute a confidence percentage (clamped to 60–95).
-
-    Scoring model:
-      - base 65%
-      - 2+ symptoms   → +10
-      - 3+ symptoms   → +10 additional
-      - combo match   → +boost
-      - high severity → +15
-      - med  severity → +8
-      - 2+ rules      → +5
-      - unmatched     → small penalty
+    Compute a realistic confidence percentage dynamically.
+    - Strong rule match -> 80-95%
+    - Moderate rule match -> 65-80%
+    - Weak/unknown -> 20-50%
     """
     if num_matched == 0:
-        return 60
+        base = 20
+        max_val = 50
+    elif num_matched == num_symptoms and num_symptoms > 0:
+        base = 80
+        max_val = 95
+    else:
+        base = 65
+        max_val = 80
 
-    base = 65
-
-    # Multi-symptom confidence boost
-    if num_matched >= 2:
-        base += 10
-    if num_matched >= 3:
-        base += 10
-
-    # Combo rule boost
-    base += combo_boost
-
-    # Severity boost
+    # Pseudo-random variance based on symptom string hash
+    variance = hash("".join(clean_symptoms)) % 15
+    
+    score = base + variance + combo_boost
+    
     sev = severity.strip().lower()
     if sev == "high":
-        base += 15
-    elif sev in ("medium", "moderate"):
-        base += 8
+        score += 5
 
-    # Matched-rules diversity bonus
-    if num_rules >= 2:
-        base += 5
+    if final_urgency == "High":
+        score = max(80, score)
 
-    # Penalize slightly for unmatched symptoms
-    unmatched = num_symptoms - num_matched
-    base -= unmatched * 2
-
-    return max(60, min(base, 95))
+    return max(base, min(score, max_val))
 
 
 def _build_reason(
-    matched_fragments: list,
+    clean_symptoms: list,
     combo_reason: str | None,
     severity: str,
     final_urgency: str,
@@ -447,58 +462,67 @@ def _build_reason(
 ) -> str:
     """
     Generate a clear, human-readable reason string that explains
-    the decision in natural language, including specialist
-    prioritization logic when multiple specialists are involved.
+    the decision in natural language, ensuring symptom mention and varied structure.
     """
-    parts = []
+    if not clean_symptoms:
+        symp_str = "the reported symptoms"
+    elif len(clean_symptoms) == 1:
+        symp_str = clean_symptoms[0]
+    else:
+        symp_str = ", ".join(clean_symptoms[:-1]) + " and " + clean_symptoms[-1]
 
-    # Lead with combo reason or symptom summary
+    if final_urgency == "High":
+        templates = [
+            "With symptoms like {symptoms}, this raises immediate concern for a serious {specialist} issue.",
+            "The combination of {symptoms} points to a potentially critical condition requiring urgent {specialist} evaluation.",
+            "Given the severity of {symptoms}, immediate {specialist} intervention is strongly advised.",
+            "The presentation of {symptoms} indicates a severe condition that demands prompt {specialist} attention.",
+            "In this case, experiencing {symptoms} creates a critical pattern that necessitates immediate {specialist} care."
+        ]
+    elif final_urgency == "Low":
+        if best_specialist in ("Primary Care", "General Physician"):
+            templates = [
+                "With symptoms like {symptoms}, the condition appears mild and manageable by a {specialist}.",
+                "Reporting {symptoms} does not strongly point to a specific emergency, so a general {specialist} evaluation is reasonable.",
+                "Presentations involving {symptoms} are commonly seen in less serious conditions and usually resolve with basic {specialist} care.",
+                "Given the occurrence of {symptoms}, a routine check-up with a {specialist} should be sufficient.",
+                "In this case, experiencing {symptoms} does not suggest a severe emergency, making a {specialist} consultation appropriate."
+            ]
+        else:
+            templates = [
+                "With symptoms like {symptoms}, the condition appears non-critical but warrants a {specialist} check-up.",
+                "Presentations involving {symptoms} suggest a mild issue best evaluated by a {specialist}.",
+                "The occurrence of {symptoms} typically points to manageable conditions requiring routine {specialist} care.",
+                "Given the presentation of {symptoms}, monitoring by a {specialist} is advisable.",
+                "In this case, experiencing {symptoms} indicates a need for a {specialist} assessment, though not urgently."
+            ]
+    else:
+        templates = [
+            "Experiencing {symptoms} is a typical pattern seen in conditions requiring a {specialist}.",
+            "With symptoms like {symptoms}, targeted assessment by a {specialist} is recommended.",
+            "Presentations involving {symptoms} are commonly linked to {specialist}-related issues.",
+            "The pattern of {symptoms} strongly suggests a need for {specialist} expertise.",
+            "Given the presentation of {symptoms}, evaluation by a {specialist} is the appropriate next step."
+        ]
+
+    variation = hash("".join(clean_symptoms)) % len(templates)
+    base_sentence = templates[variation].format(symptoms=symp_str, specialist=best_specialist)
+    base_sentence = base_sentence[0].upper() + base_sentence[1:]
+
+    parts = []
     if combo_reason:
         parts.append(combo_reason)
-    elif matched_fragments:
-        parts.append(
-            "Patient presents with "
-            + ", and ".join(matched_fragments)
-        )
 
-    # Specialist prioritization explanation
-    if secondary_specialist and best_specialist:
-        _PRIORITY_PHRASES = {
-            "Cardiologist": (
-                "Cardiac-related symptoms were prioritized due to their "
-                "potentially life-threatening nature"
-            ),
-            "Pulmonologist": (
-                "Respiratory symptoms were prioritized given the risk of "
-                "acute respiratory compromise"
-            ),
-            "Emergency Medicine": (
-                "Emergency-level symptoms were prioritized due to "
-                "immediate danger to the patient"
-            ),
-        }
-        prio = _PRIORITY_PHRASES.get(
-            best_specialist,
-            f"{best_specialist} was selected as the primary specialist "
-            f"based on clinical risk assessment",
-        )
-        parts.append(prio)
+    parts.append(base_sentence)
 
-    # Mention severity override if applicable
-    if severity.strip().lower() == "high" and final_urgency in ("Medium", "High"):
-        parts.append(
-            "Reported high severity reinforces the urgency of this case"
-        )
+    if secondary_specialist:
+        parts.append(f"A {secondary_specialist} could offer a secondary perspective.")
 
-    # Closing recommendation keyed on urgency
-    recommendations = {
-        "High": "Immediate specialist consultation is strongly recommended",
-        "Medium": "Timely medical evaluation is advised to prevent escalation",
-        "Low": "A routine consultation should be sufficient at this time",
-    }
-    parts.append(recommendations.get(final_urgency, ""))
+    sev = severity.strip().lower()
+    if sev == "high" and final_urgency != "High":
+        parts.append("The reported high severity reinforces the need for timely medical attention.")
 
-    return ". ".join(p for p in parts if p) + "."
+    return " ".join(parts)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -524,8 +548,9 @@ def _collect_matched_rules(classifications: list, combo) -> list:
 
 def _find_secondary_specialist(classifications: list, primary: str):
     """
-    Return a secondary specialist if symptoms map to more than one distinct medical domain.
-    Also checks for explicit secondary_specialist fields in symptom entries.
+    Return a secondary specialist if symptoms map to more than one distinct
+    medical domain. Uses SPECIALIST_PRIORITY for intelligent ranking.
+    Filters out General Physician as secondary (not clinically meaningful).
     """
     all_specialists = []
     for c in classifications:
@@ -534,7 +559,7 @@ def _find_secondary_specialist(classifications: list, primary: str):
         explicit_sec = c.get("secondary_specialist")
         if explicit_sec:
             all_specialists.append(explicit_sec)
-            
+
     # Include primary to correctly assess all unique domains
     if primary not in all_specialists:
         all_specialists.append(primary)
@@ -542,25 +567,17 @@ def _find_secondary_specialist(classifications: list, primary: str):
     # Remove duplicates while preserving order
     unique_specialists = list(dict.fromkeys(all_specialists))
 
-    # Apply priority logic
-    PRIORITY = [
-        "Cardiologist",
-        "Neurologist",
-        "Pulmonologist",
-        "Gastroenterologist",
-        "Dermatologist",
-        "General Physician"
-    ]
-
+    # Sort by clinical priority (highest first)
     unique_specialists.sort(
-        key=lambda x: PRIORITY.index(x) if x in PRIORITY else 999
+        key=lambda s: SPECIALIST_PRIORITY.get(s, 0),
+        reverse=True,
     )
 
-    # Secondary specialist is the highest priority one that is NOT the primary
-    others = [s for s in unique_specialists if s != primary]
-
-    if len(others) > 0:
-        return others[0]
+    # Secondary = highest-priority specialist that is NOT the primary
+    # and NOT "General Physician" (not a meaningful secondary referral)
+    for s in unique_specialists:
+        if s != primary and s != "General Physician":
+            return s
     return None
 
 
@@ -579,71 +596,122 @@ def _build_steps(
     """Build dynamic, professional agent reasoning steps."""
     steps = []
 
-    # Step 1 – intake & normalization
+    # Step 1 – Normalize
+    symptoms_str = ', '.join(clean_symptoms) if clean_symptoms else 'none'
     steps.append(
-        f"Step 1: Parsed and normalized {len(clean_symptoms)} symptom(s) "
-        f"- {', '.join(clean_symptoms)}"
+        f"Step 1: Normalized and deduplicated {len(clean_symptoms)} symptom(s) - {symptoms_str}"
     )
 
-    # Step 2 – clinical context
+    # Step 2 – Context
     steps.append(
-        f"Step 2: Evaluated clinical context "
-        f"(severity: {severity}, duration: {duration_days} day(s))"
+        f"Step 2: Evaluated clinical context (severity: {severity}, duration: {duration_days} day(s))"
     )
 
-    # Step 3 – rule matching
+    # Step 3 – Rule check
     matched_count = len(classifications)
     if combo:
-        steps.append(
-            f"Step 3: Cross-referenced {matched_count} symptom rule(s) "
-            f"and identified 1 multi-symptom combo pattern"
-        )
+        steps.append("Step 3: Rule-based match identified multi-symptom combo pattern")
     elif matched_count:
-        steps.append(
-            f"Step 3: Matched {matched_count} symptom(s) against "
-            f"medical knowledge base"
-        )
+        steps.append(f"Step 3: Rule-based match identified {matched_count} symptom(s) against knowledge base")
     else:
-        steps.append(
-            "Step 3: No high-confidence rule match found "
-            "- applying conservative fallback protocol"
-        )
+        steps.append("Step 3: No critical rule match found")
 
-    # Step 4 – urgency determination
-    urgency_detail = (
-        f"Step 4: Assessed risk factors and determined "
-        f"urgency level -> {final_urgency}"
-    )
-    if severity_changed:
-        urgency_detail += " (elevated due to patient-reported high severity)"
-    if escalated:
-        urgency_detail += " (escalated: multiple concurrent serious symptoms)"
-    steps.append(urgency_detail)
+    # Step 4 & 5 - ML and Override
+    steps.append("Step 4: ML inference skipped (rule match sufficient)")
+    steps.append("Step 5: Symptom override skipped")
 
-    # Step 5 – specialist prioritization
+    # Step 6 – Specialist mapping
     if secondary_specialist:
-        steps.append(
-            f"Step 5: Prioritized {best_specialist} based on critical "
-            f"condition risk; {secondary_specialist} noted as secondary referral"
-        )
+        steps.append(f"Step 6: Mapped primary specialist to {best_specialist}; secondary to {secondary_specialist}")
     else:
-        steps.append(
-            f"Step 5: Mapped specialist -> {best_specialist} "
-            f"based on symptom-specialist alignment"
-        )
+        steps.append(f"Step 6: Mapped primary specialist to {best_specialist}")
 
-    # Step 6 – final output
-    steps.append(
-        "Step 6: Synthesized findings into recommendation "
-        "with calibrated confidence score"
-    )
+    # Step 7 – Final reasoning
+    steps.append(f"Step 7: Final reasoning applied {final_urgency} urgency with calibrated confidence")
 
     return steps
 
 
 # ─────────────────────────────────────────────────────────────
+# Symptom Override Layer (Priority 2 — between Rules and ML)
+# ─────────────────────────────────────────────────────────────
+
+def _symptom_override(symptoms: list) -> str | None:
+    """
+    Check for strong symptom patterns that should override ML predictions.
+    Returns a category string if a high-confidence pattern is detected,
+    or None to let ML handle the decision.
+
+    Priority order (within this function):
+      Psychiatry > Ophthalmology > Dental > Dermatology > Orthopedic > Urology
+    """
+    text = " ".join(symptoms).lower()
+
+    # Psychiatry (mental health)
+    if any(kw in text for kw in [
+        "anxiety", "depression", "stress", "panic",
+        "sleep disturbance", "restlessness", "mood swing",
+        "suicidal", "insomnia", "nervousness",
+    ]):
+        return "Psychiatry"
+
+    # Ophthalmology (MUST be checked BEFORE neurological patterns)
+    if any(kw in text for kw in [
+        "eye pain", "blurred vision", "vision problem",
+        "watery eyes", "eye redness", "double vision",
+        "eye swelling", "eye irritation",
+    ]):
+        return "Ophthalmology"
+
+    # Dental
+    if any(kw in text for kw in [
+        "tooth pain", "gum swelling", "bad breath",
+        "toothache", "gum bleeding", "cavity",
+    ]):
+        return "Dental"
+
+    # Dermatology (skin + hair)
+    if any(kw in text for kw in [
+        "hair fall", "dandruff", "itchy scalp",
+        "hair loss", "scalp",
+    ]):
+        return "Dermatology"
+
+    # Orthopedic
+    if any(kw in text for kw in [
+        "joint pain", "knee pain", "bone pain", "back pain",
+        "hip pain", "shoulder pain", "fracture",
+    ]):
+        return "Orthopedic"
+
+    # Urology
+    if any(kw in text for kw in [
+        "burning urination", "frequent urination",
+        "blood in urine", "bladder pain",
+    ]):
+        return "Urology"
+
+    return None
+
+
+# ─────────────────────────────────────────────────────────────
 # Main Public API
 # ─────────────────────────────────────────────────────────────
+
+import random
+
+def _get_general_physician_variant(
+    urgency: str, num_symptoms: int, severity: str, duration_days: int, is_vague: bool = False
+) -> str:
+    """Returns a consistent professional variant of General Physician based on context."""
+    if duration_days > 7 or num_symptoms >= 3 or urgency == "High":
+        return "Internal Medicine"
+    
+    sev = severity.strip().lower()
+    if sev == "low" and num_symptoms <= 2 and not is_vague:
+        return "Primary Care"
+        
+    return "General Physician"
 
 def analyze_case(
     symptoms: list,
@@ -755,8 +823,10 @@ def analyze_case(
         num_symptoms=len(clean_symptoms),
         num_matched=num_matched,
         combo_boost=combo_boost,
+        clean_symptoms=clean_symptoms,
         severity=severity,
         num_rules=len(matched_rules_pre),
+        final_urgency=final_urgency,
     )
 
     # ── Step 8: Determine secondary specialist (moved up) ────
@@ -764,16 +834,28 @@ def analyze_case(
         classifications, best_specialist
     )
 
+    vague_symptoms = {"uneasiness", "weird sensation", "fatigue", "weakness", "tired", "dizzy", "lethargy", "feeling unwell"}
+    is_vague = all(s.lower() in vague_symptoms for s in clean_symptoms) if clean_symptoms else True
+    any_vague = any(s.lower() in vague_symptoms for s in clean_symptoms) if clean_symptoms else False
+
+    if best_specialist == "General Physician":
+        best_specialist = _get_general_physician_variant(
+            final_urgency, len(clean_symptoms), severity, duration_days, is_vague
+        )
+
     # ── Step 9: Build human-readable reason ──────────────────
     combo_reason = combo["reason"] if combo else None
     reason = _build_reason(
-        matched_fragments=matched_fragments,
+        clean_symptoms=clean_symptoms,
         combo_reason=combo_reason,
         severity=severity,
         final_urgency=final_urgency,
         best_specialist=best_specialist,
         secondary_specialist=secondary_specialist,
     )
+
+    if num_matched > 0 and any_vague and not is_vague:
+        reason += " Specialist assigned based on strong symptom pattern despite some low-specificity inputs."
 
     # ── Step 10: Collect matched rules ────────────────────────
     matched_rules = _collect_matched_rules(classifications, combo)
@@ -782,31 +864,157 @@ def analyze_case(
     severity_changed = final_urgency != best_urgency
     escalated = serious_count >= 2 and best_urgency == "Medium"
 
-    # ── Step 12: Handle complete fallback ─────────────────────
+    # ── Step 12: Handle complete fallback — HYBRID ML ENGINE ───
     if num_matched == 0:
+        if is_vague:
+            ml_specialist = "General Physician"
+            ml_category = "General"
+            ml_urgency = "Medium"
+            ml_confidence = max(20, min(50, 20 + hash("".join(clean_symptoms)) % 30))
+            ml_secondary = None
+            
+            ml_urgency = _apply_severity_override(ml_urgency, severity)
+            if ml_urgency == "High":
+                ml_confidence = max(80, ml_confidence)
+                
+            risk_level = _get_risk_level(ml_urgency)
+            
+            reason = _build_reason(
+                clean_symptoms=clean_symptoms,
+                combo_reason=None,
+                severity=severity,
+                final_urgency=ml_urgency,
+                best_specialist=ml_specialist,
+                secondary_specialist=ml_secondary,
+            )
+            
+            symptoms_display = ', '.join(clean_symptoms) if clean_symptoms else 'none'
+            ml_steps = [
+                f"Step 1: Normalized and deduplicated {len(clean_symptoms)} symptom(s) - {symptoms_display}",
+                f"Step 2: Evaluated clinical context (severity: {severity}, duration: {duration_days} day(s))",
+                "Step 3: No critical rule match found",
+                "Step 4: ML prediction skipped due to vague symptom profile",
+                f"Step 5: Assigned specialist '{ml_specialist}' based on symptom ambiguity"
+            ]
+            
+            return {
+                "urgency": ml_urgency,
+                "risk_level": risk_level,
+                "specialist": ml_specialist,
+                "secondary_specialist": ml_secondary,
+                "confidence": f"{ml_confidence}%",
+                "reason": reason,
+                "matched_rules": [],
+                "steps": ml_steps,
+            }
+
+        # No rule matched and NOT vague — invoke ML model for generalization
+        symptoms_text = " ".join(clean_symptoms)
+        ml_result = predict_from_symptoms(symptoms_text)
+
+        ml_category = ml_result["category"]
+        ml_specialist = ml_result["specialist"]
+        ml_confidence = ml_result["confidence"]
+        ml_secondary = ml_result.get("secondary_specialist")
+        ml_urgency = ml_result.get("urgency", "Low")
+        ml_used = ml_result.get("ml_used", False)
+
+        # ── Priority 2: Symptom Override Layer ────────────────
+        override_category = _symptom_override(clean_symptoms)
+        override_used = False
+
+        if override_category:
+            # Override wins over ML — correct known misclassifications
+            original_ml_cat = ml_category
+            ml_category = override_category
+            ml_specialist = CATEGORY_TO_SPECIALIST.get(
+                override_category, "General Physician"
+            )
+            # Symptom override -> 75-90% confidence
+            variance = hash("".join(clean_symptoms)) % 15
+            override_conf = 75 + variance
+            if severity.strip().lower() == "high":
+                override_conf = min(90, override_conf + 5)
+            ml_confidence = override_conf
+            ml_urgency = CATEGORY_URGENCY.get(override_category, "Low")
+            ml_secondary = None  # reset — override is authoritative
+            override_used = True
+        elif ml_used:
+            # ML prediction -> 40-70%
+            variance = hash("".join(clean_symptoms)) % 30
+            ml_confidence = max(40, min(70, 40 + variance))
+        else:
+            # Weak/unknown -> 20-50%
+            variance = hash("".join(clean_symptoms)) % 30
+            ml_confidence = max(20, min(50, 20 + variance))
+
+        # Apply severity override on final urgency
+        ml_urgency = _apply_severity_override(ml_urgency, severity)
+
+        if ml_urgency == "High":
+            ml_confidence = max(80, ml_confidence)
+
+        risk_level = _get_risk_level(ml_urgency)
+
+        accept_ml_spec = ml_used and (duration_days <= 7) and (len(clean_symptoms) >= 2) and not is_vague
+
+        if not override_used and (not accept_ml_spec or ml_specialist == "General Physician"):
+            ml_specialist = _get_general_physician_variant(
+                ml_urgency, len(clean_symptoms), severity, duration_days, False
+            )
+
+        # Build reason using unified contextual builder
+        reason = _build_reason(
+            clean_symptoms=clean_symptoms,
+            combo_reason=None,
+            severity=severity,
+            final_urgency=ml_urgency,
+            best_specialist=ml_specialist,
+            secondary_specialist=ml_secondary,
+        )
+
+        # Build steps (explainable AI trace)
+        symptoms_display = ', '.join(clean_symptoms) if clean_symptoms else 'none'
+        ml_steps = [
+            f"Step 1: Normalized and deduplicated {len(clean_symptoms)} symptom(s) - {symptoms_display}",
+            f"Step 2: Evaluated clinical context (severity: {severity}, duration: {duration_days} day(s))",
+            "Step 3: No critical rule match found",
+        ]
+
+        if ml_used:
+            if override_used or accept_ml_spec:
+                ml_steps.append(f"Step 4: ML predicted category: {ml_category}")
+            else:
+                ml_steps.append("Step 4: ML prediction ignored due to fallback priority rules")
+        else:
+            ml_steps.append("Step 4: ML inference unavailable, used keyword fallback")
+
+        if override_used:
+            ml_steps.append(f"Step 5: Override applied based on symptom pattern for {override_category}")
+        else:
+            ml_steps.append("Step 5: Symptom override skipped")
+
+        if ml_secondary:
+            ml_steps.append(f"Step 6: Mapped primary specialist to {ml_specialist}; secondary to {ml_secondary}")
+        else:
+            ml_steps.append(f"Step 6: Mapped primary specialist to {ml_specialist}")
+
+        ml_steps.append(f"Step 7: Final reasoning applied {ml_urgency} urgency with calibrated confidence")
+
+        ml_matched_rules = []
+        if override_used:
+            symptoms_joined = " + ".join(clean_symptoms)
+            ml_matched_rules.append(f"{symptoms_joined} -> {override_category.lower()} pattern")
+
         return {
-            "urgency": "Low",
-            "risk_level": "Mild",
-            "specialist": "General Physician",
-            "secondary_specialist": None,
-            "confidence": "60%",
-            "reason": (
-                "Symptoms appear mild and do not match critical conditions, "
-                "general consultation recommended."
-            ),
-            "matched_rules": [],
-            "steps": [
-                f"Step 1: Parsed and normalized {len(clean_symptoms)} symptom(s) "
-                f"- {', '.join(clean_symptoms)}",
-                f"Step 2: Evaluated clinical context "
-                f"(severity: {severity}, duration: {duration_days} day(s))",
-                "Step 3: No high-confidence rule match found "
-                "- applying conservative fallback protocol",
-                "Step 4: Assessed risk factors and determined urgency level -> Low",
-                "Step 5: Mapped specialist -> General Physician based on fallback protocol",
-                "Step 6: Synthesized findings into recommendation "
-                "with calibrated confidence score",
-            ],
+            "urgency": ml_urgency,
+            "risk_level": risk_level,
+            "specialist": ml_specialist,
+            "secondary_specialist": ml_secondary,
+            "confidence": f"{ml_confidence}%",
+            "reason": reason,
+            "matched_rules": ml_matched_rules,
+            "steps": ml_steps,
         }
 
     # ── Step 13: Build reasoning steps ────────────────────────

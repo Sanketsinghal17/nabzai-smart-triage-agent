@@ -121,13 +121,13 @@ TEST_CASES = [
         "expected_urgency": "Low",
     },
     {
-        "name": "[EDGE] Unknown symptom (should fallback)",
+        "name": "[EDGE] Unknown symptom (ML hybrid fallback)",
         "input": {
             "symptoms": ["purple tongue"],
             "severity": "normal",
             "duration_days": 1,
         },
-        "expected_urgency": "Low",
+        "expected_urgency": "Medium",  # ML model now handles unknowns
     },
     {
         "name": "[EDGE] Severity override (low symptoms + high severity)",
@@ -164,6 +164,44 @@ TEST_CASES = [
             "duration_days": 2,
         },
         "expected_urgency": "High",
+    },
+
+    # -- ML HYBRID ENGINE TESTS ----------------------------------------
+    {
+        "name": "[ML] Dataset-trained symptoms (itching + skin rash)",
+        "input": {
+            "symptoms": ["itching", "nodal skin eruptions"],
+            "severity": "normal",
+            "duration_days": 3,
+        },
+        "expected_urgency": "Low",  # Dermatology → Low
+    },
+    {
+        "name": "[ML] Keyword inference (depression + anxiety)",
+        "input": {
+            "symptoms": ["depression", "anxiety"],
+            "severity": "normal",
+            "duration_days": 10,
+        },
+        "expected_urgency": "Medium",  # Psychiatry → Medium
+    },
+    {
+        "name": "[ML] Severity override on ML result",
+        "input": {
+            "symptoms": ["yellowish skin", "dark urine"],
+            "severity": "high",
+            "duration_days": 5,
+        },
+        "expected_urgency": "Medium",  # Dermatology Low + severity high → Medium
+    },
+    {
+        "name": "[ML] Multi-symptom ML (continuous sneezing + chills)",
+        "input": {
+            "symptoms": ["continuous sneezing", "chills", "shivering"],
+            "severity": "normal",
+            "duration_days": 2,
+        },
+        "expected_urgency": "Medium",  # Respiratory → Medium
     },
 ]
 
