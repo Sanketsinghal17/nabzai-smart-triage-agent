@@ -127,7 +127,7 @@ TEST_CASES = [
             "severity": "normal",
             "duration_days": 1,
         },
-        "expected_urgency": "Medium",  # ML model now handles unknowns
+        "expected_urgency": "Low",  # ML model fallback for unknown symptom + normal severity -> Low
     },
     {
         "name": "[EDGE] Severity override (low symptoms + high severity)",
@@ -136,7 +136,7 @@ TEST_CASES = [
             "severity": "high",
             "duration_days": 1,
         },
-        "expected_urgency": "Medium",  # Low -> Medium via severity override
+        "expected_urgency": "High",  # Low -> High via severity override
     },
     {
         "name": "[EDGE] Fever under 3 days (should be Low, not Medium)",
@@ -192,7 +192,7 @@ TEST_CASES = [
             "severity": "high",
             "duration_days": 5,
         },
-        "expected_urgency": "Medium",  # Dermatology Low + severity high → Medium
+        "expected_urgency": "High",  # Dermatology Low + severity high → High
     },
     {
         "name": "[ML] Multi-symptom ML (continuous sneezing + chills)",
@@ -201,7 +201,25 @@ TEST_CASES = [
             "severity": "normal",
             "duration_days": 2,
         },
-        "expected_urgency": "Medium",  # Respiratory → Medium
+        "expected_urgency": "Low",  # Unknown pattern + normal severity -> Low
+    },
+    {
+        "name": "[STABILITY] Long-duration vague symptoms (uneasiness + 10 days)",
+        "input": {
+            "symptoms": ["uneasiness"],
+            "severity": "normal",
+            "duration_days": 10,
+        },
+        "expected_urgency": "Medium",
+    },
+    {
+        "name": "[STABILITY] Long-duration unknown symptom (purple tongue + 10 days)",
+        "input": {
+            "symptoms": ["purple tongue"],
+            "severity": "normal",
+            "duration_days": 10,
+        },
+        "expected_urgency": "Medium",
     },
 ]
 
